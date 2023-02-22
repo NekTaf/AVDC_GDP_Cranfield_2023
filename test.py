@@ -13,19 +13,19 @@ def main():
     print(torch.cuda.memory_summary(device=None, abbreviated=False))
 
     torch.cuda.is_available()
-    torch.cuda.set_per_process_memory_fraction(0.35)
+    torch.cuda.set_per_process_memory_fraction(0.39)
 
     # Load a model
     model = YOLO("yolov8n.yaml")  # build a new model from scratch
     #model = YOLO("yolov8n.pt")  # load a pretrained model (recommended for training)
 
-    path = r"C:\Users\Nekta\PycharmProjects\GDP_AI\data_car"
+    path = r"C:\Users\Nekta\PycharmProjects\GDP_AI\tesi.v3i.yolov8"
     os.chdir(path)
 
     print("Current working directory: {0}".format(os.getcwd()))
 
     # Use the model
-    model.train(data=r"C:\Users\Nekta\PycharmProjects\GDP_AI\data_car\data.yaml", epochs=40, batch=4)  # train the model
+    model.train(data=path+r"\data.yaml", epochs=100, batch=5)  # train the model
     metrics = model.val()  # evaluate model performance on the validation set
 
     # results = model("https://ultralytics.com/images/bus.jpg")  # predict on an image
