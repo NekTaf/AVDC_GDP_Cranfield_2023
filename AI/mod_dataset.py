@@ -27,6 +27,6 @@ for dire in directory:
                     #print(new_line)
 
                     f.write(new_line+'\n')
-        i=+1
+            i=+1
     print(i)
 
