@@ -10,7 +10,6 @@ Features:
     Semantic segmentation using Depth map of enviroment
 """
 
-
 from ultralytics import YOLO
 import time
 import cv2
@@ -42,7 +41,7 @@ def main():
     # Load YOLO Model
     model = YOLO("best2.pt")
 
-    no_targets_selected=None
+    no_targets_selected = None
 
     # Start Pipeline
     pipeline.start(config)
@@ -67,18 +66,41 @@ def main():
             # Convert images to numpy arrays
             color_image = np.asanyarray(color_frame.get_data())
 
-            # # Get Width and Height
-            # depth_colormap_dim = depth_colormap.shape
-            # color_colormap_dim = color_image.shape
-
             # Convert to RBG to BGR (PIL is BGR format)
             color_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
 
             # Convert frame to PIL, or else lag in YOLO when using D415???
             img = Image.fromarray(color_image)
 
+            # Get Depth Image
+            depth_image = np.asanyarray(depth_frame.get_data())
+
+            # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
+            depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+
+            # Grayscale Depth Color Map
+            depth_colormap_gray = cv2.cvtColor(depth_colormap, cv2.COLOR_BGR2GRAY)
+
+            # Cluster Depth Map
+            clustered_depth_map = Clustering(depth_colormap_gray, 2).KM()
+
+            # print(np.unique(np.uint8(clustered_depth_map)))
+
+            # Cluster Values
+            cluster_vals = np.unique(clustered_depth_map)
+
+            # Conve
+            binary_mask = np.where(clustered_depth_map < (cluster_vals[0] + 5), 1, 0)
+            binary_mask = np.uint8(binary_mask)
+
+            # Apply Morphological filter to cover holes
+            kernel = np.ones((9, 9), np.uint8)
+            mask_closed = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel)
+            masked_img = cv2.bitwise_and(color_image, color_image, mask=mask_closed)
+            masked_img = cv2.cvtColor(masked_img, cv2.COLOR_BGR2RGB)
+
             # YOLOv8n custom on Frame
-            results = model(img)
+            results = model(masked_img)
 
             # Plot Results
             res_plotted = results[0].plot(show_conf=True)
@@ -86,11 +108,10 @@ def main():
             # Array Nx1 for confidence of object detected
             conf_array = results[0].boxes.conf.cpu().numpy()
 
-            no_targets_total=len(conf_array)
+            no_targets_total = len(conf_array)
 
             # Array storing ranges for each target
             depth_point = np.empty(no_targets_total)
-
 
             # Array Nx4 for xywh of bounding box for object detected
             box_array = results[0].boxes.xywh.cpu().numpy()
@@ -117,13 +138,13 @@ def main():
                         # Clamp Target range to D415 allowed ranges
                         if depth_point[N] > 16: print(depth_point, " Target range suppresses 16m")
 
-                        depth_point[N]=clamp(depth_point[N], 0, 16)
+                        depth_point[N] = clamp(depth_point[N], 0, 16)
 
                         print(depth_point[N], " Range for target :", N)
 
                         print(conf_array[N], " Confidence for target :", N)
 
-                no_targets_selected=len(depth_point)
+                no_targets_selected = len(depth_point)
 
                 print(no_targets_selected)
 
@@ -133,34 +154,15 @@ def main():
                 thr_filter = rs.threshold_filter()
                 thr_filter.set_option(rs.option.min_distance, 0.1)
                 thr_filter.set_option(rs.option.max_distance, max(depth_point))
-                depth_frame = thr_filter.process(depth_frame)
+                # depth_frame = thr_filter.process(depth_frame)
                 depth_frame = rs.hole_filling_filter().process(depth_frame)
-
-            depth_image = np.asanyarray(depth_frame.get_data())
-
-            # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
-            depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
-
-
-            depth_colormap_gray = cv2.cvtColor(depth_colormap, cv2.COLOR_BGR2GRAY)
-            # print(depth_colormap_gray.shape)
-            # print(np.unique(depth_colormap_gray))
 
             # Show images
             cv2.namedWindow('YOLO', cv2.WINDOW_AUTOSIZE)
             cv2.imshow('YOLO', res_plotted)
 
             cv2.namedWindow('Gray Depth Map', cv2.WINDOW_AUTOSIZE)
-            cv2.imshow('Gray Depth Map', cv2.equalizeHist(depth_colormap_gray))
-
-            if not no_targets_selected:
-                print("No targets with high probability detected")
-
-            else:
-                out =Clustering(depth_colormap_gray,no_targets_selected+1).KM()
-
-                cv2.namedWindow('Gray K-Means', cv2.WINDOW_AUTOSIZE)
-                cv2.imshow('Gray K-Means', out)
+            cv2.imshow('Gray Depth Map', cv2.equalizeHist(binary_mask))
 
             # Check if the user pressed the "q" key to quit
             if cv2.waitKey(1) == ord('q'):
