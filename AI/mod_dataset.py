@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+
+"""
+Modify Datasets (remove or combine class labels)
+"""
+
+
 import os
 
 # assign directory

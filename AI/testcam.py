@@ -1,8 +1,9 @@
-#######################################
+#!/usr/bin/env python3
 
-# YOLO with Camera frames
+"""
+YOLOv8 openCV implementation
+"""
 
-#######################################
 
 
 from ultralytics import YOLO
@@ -66,6 +67,9 @@ while True:
                 radius = 5
                 color = (0, 255, 0)  # BGR format
                 res_plotted = cv2.circle(res_plotted, (x, y), radius, color, -1)
+
+
+
 
     # Plot Output image
     cv2.imshow('YOLO', res_plotted)

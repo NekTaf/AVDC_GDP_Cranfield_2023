@@ -1,8 +1,9 @@
-#######################################
+#!/usr/bin/env python3
 
-# Intel Realsense 415 Get Depth Map and RGB
+"""
+intel Realsense D415 depth map and RGB frames example script
+"""
 
-#######################################
 
 import pyrealsense2 as rs
 import numpy as np

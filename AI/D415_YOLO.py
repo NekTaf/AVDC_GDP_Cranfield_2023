@@ -1,23 +1,30 @@
-#######################################
+#!/usr/bin/env python3
 
-# YOLO with Camera frames
+"""
+intel Realsense D415 using YOLOv8 (pytorch)
 
-#######################################
+Features:
+
+    Car detection using RGB frames
+
+    Semantic segmentation using Depth map of enviroment
+"""
 
 
 from ultralytics import YOLO
-import cv2
 import time
 import cv2
 import numpy as np
 import pyrealsense2 as rs
 from PIL import Image
+from cluster import Clustering
 
 
+def clamp(n, min_value, max_value):
+    return max(min(n, max_value), min_value)
 
 
 def main():
-
     # Configure depth and color streams
     pipeline = rs.pipeline()
     config = rs.config()
@@ -29,11 +36,13 @@ def main():
     device_product_line = str(device.get_info(rs.camera_info.product_line))
 
     # Enable RGB and Depth Streams
-    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 15)
-    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 15)
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
     # Load YOLO Model
     model = YOLO("best2.pt")
+
+    no_targets_selected=None
 
     # Start Pipeline
     pipeline.start(config)
@@ -58,7 +67,6 @@ def main():
             # Convert images to numpy arrays
             color_image = np.asanyarray(color_frame.get_data())
 
-
             # # Get Width and Height
             # depth_colormap_dim = depth_colormap.shape
             # color_colormap_dim = color_image.shape
@@ -77,6 +85,12 @@ def main():
 
             # Array Nx1 for confidence of object detected
             conf_array = results[0].boxes.conf.cpu().numpy()
+
+            no_targets_total=len(conf_array)
+
+            # Array storing ranges for each target
+            depth_point = np.empty(no_targets_total)
+
 
             # Array Nx4 for xywh of bounding box for object detected
             box_array = results[0].boxes.xywh.cpu().numpy()
@@ -98,26 +112,55 @@ def main():
                         res_plotted = cv2.circle(res_plotted, (x, y), radius, color, -1)
 
                         # Get Depth for Center Coordinate
-                        depth_point = depth_frame.get_distance(x, y)
-                        print(depth_point, "for target :",N)
+                        depth_point[N] = depth_frame.get_distance(x, y)
 
-            thr_filter = rs.threshold_filter()
-            thr_filter.set_option(rs.option.min_distance, 0.1)
-            thr_filter.set_option(rs.option.max_distance, depth_point)
-            depth_frame = thr_filter.process(depth_frame)
+                        # Clamp Target range to D415 allowed ranges
+                        if depth_point[N] > 16: print(depth_point, " Target range suppresses 16m")
+
+                        depth_point[N]=clamp(depth_point[N], 0, 16)
+
+                        print(depth_point[N], " Range for target :", N)
+
+                        print(conf_array[N], " Confidence for target :", N)
+
+                no_targets_selected=len(depth_point)
+
+                print(no_targets_selected)
+
+            # Check if array empty (Targets Detected)
+            if depth_point.size != 0:
+                # Threshold Filter for Segmentation
+                thr_filter = rs.threshold_filter()
+                thr_filter.set_option(rs.option.min_distance, 0.1)
+                thr_filter.set_option(rs.option.max_distance, max(depth_point))
+                depth_frame = thr_filter.process(depth_frame)
+                depth_frame = rs.hole_filling_filter().process(depth_frame)
+
             depth_image = np.asanyarray(depth_frame.get_data())
 
             # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
             depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
 
-            # Stack Images
-            images = np.hstack((res_plotted, depth_colormap))
+
+            depth_colormap_gray = cv2.cvtColor(depth_colormap, cv2.COLOR_BGR2GRAY)
+            # print(depth_colormap_gray.shape)
+            # print(np.unique(depth_colormap_gray))
 
             # Show images
             cv2.namedWindow('YOLO', cv2.WINDOW_AUTOSIZE)
+            cv2.imshow('YOLO', res_plotted)
 
-            # Plot Output image
-            cv2.imshow('YOLO', images)
+            cv2.namedWindow('Gray Depth Map', cv2.WINDOW_AUTOSIZE)
+            cv2.imshow('Gray Depth Map', cv2.equalizeHist(depth_colormap_gray))
+
+            if not no_targets_selected:
+                print("No targets with high probability detected")
+
+            else:
+                out =Clustering(depth_colormap_gray,no_targets_selected+1).KM()
+
+                cv2.namedWindow('Gray K-Means', cv2.WINDOW_AUTOSIZE)
+                cv2.imshow('Gray K-Means', out)
 
             # Check if the user pressed the "q" key to quit
             if cv2.waitKey(1) == ord('q'):
@@ -129,9 +172,6 @@ def main():
 
         # Stop streaming
         pipeline.stop()
-
-        # Release the camera and destroy all windows
-        cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
