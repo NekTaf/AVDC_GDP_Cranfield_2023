@@ -18,7 +18,7 @@ class Clustering(object):
         self.img = img
         self.clusters = clusters
 
-    def KM(self, iter=20):
+    def KM(self, iter=3):
 
         # K-Means number of iterations (3 preassigned value)
         self.iter = iter

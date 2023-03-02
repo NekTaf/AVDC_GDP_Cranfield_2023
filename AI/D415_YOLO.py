@@ -7,7 +7,7 @@ Features:
 
     Car detection using RGB frames
 
-    Semantic segmentation using Depth map of enviroment
+    Semantic segmentation using Depth map of environment
 """
 
 from ultralytics import YOLO
@@ -41,7 +41,8 @@ def main():
     # Load YOLO Model
     model = YOLO("best2.pt")
 
-    no_targets_selected = None
+    # Initialise empty
+    depth_point = np.empty(0)
 
     # Start Pipeline
     pipeline.start(config)
@@ -66,11 +67,12 @@ def main():
             # Convert images to numpy arrays
             color_image = np.asanyarray(color_frame.get_data())
 
-            # Convert to RBG to BGR (PIL is BGR format)
-            color_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
+            # Check if array empty (Targets Detected)
+            if depth_point.size != 0 and max(depth_point)>0.15:
+                # Threshold Filter for Segmentation
+                threshold_filter = rs.threshold_filter(min_dist=0.15, max_dist= max(depth_point))
+                depth_frame = threshold_filter.process(depth_frame).as_depth_frame()
 
-            # Convert frame to PIL, or else lag in YOLO when using D415???
-            img = Image.fromarray(color_image)
 
             # Get Depth Image
             depth_image = np.asanyarray(depth_frame.get_data())
@@ -94,10 +96,18 @@ def main():
             binary_mask = np.uint8(binary_mask)
 
             # Apply Morphological filter to cover holes
-            kernel = np.ones((9, 9), np.uint8)
-            mask_closed = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel)
-            masked_img = cv2.bitwise_and(color_image, color_image, mask=mask_closed)
-            masked_img = cv2.cvtColor(masked_img, cv2.COLOR_BGR2RGB)
+            # kernel = np.ones((9, 9), np.uint8)
+            # mask_closed = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel)
+
+            # Define the structuring element
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+            morph_filtered = cv2.dilate(binary_mask, kernel, iterations=1)
+
+
+            masked_img = cv2.bitwise_and(color_image, color_image, mask=morph_filtered)
+
+
+            # masked_img = cv2.cvtColor(masked_img, cv2.COLOR_BGR2RGB)
 
             # YOLOv8n custom on Frame
             results = model(masked_img)
@@ -146,23 +156,20 @@ def main():
 
                 no_targets_selected = len(depth_point)
 
-                print(no_targets_selected)
-
-            # Check if array empty (Targets Detected)
-            if depth_point.size != 0:
-                # Threshold Filter for Segmentation
-                thr_filter = rs.threshold_filter()
-                thr_filter.set_option(rs.option.min_distance, 0.1)
-                thr_filter.set_option(rs.option.max_distance, max(depth_point))
-                # depth_frame = thr_filter.process(depth_frame)
-                depth_frame = rs.hole_filling_filter().process(depth_frame)
+                print("Total number of selected targets",no_targets_selected)
 
             # Show images
+            cv2.namedWindow('RGB Image', cv2.WINDOW_AUTOSIZE)
+            cv2.imshow('RGB Image', color_image)
+
             cv2.namedWindow('YOLO', cv2.WINDOW_AUTOSIZE)
             cv2.imshow('YOLO', res_plotted)
 
+            cv2.namedWindow('MASK', cv2.WINDOW_AUTOSIZE)
+            cv2.imshow('MASK', cv2.equalizeHist(morph_filtered))
+
             cv2.namedWindow('Gray Depth Map', cv2.WINDOW_AUTOSIZE)
-            cv2.imshow('Gray Depth Map', cv2.equalizeHist(binary_mask))
+            cv2.imshow('Gray Depth Map', cv2.equalizeHist(depth_colormap_gray))
 
             # Check if the user pressed the "q" key to quit
             if cv2.waitKey(1) == ord('q'):
