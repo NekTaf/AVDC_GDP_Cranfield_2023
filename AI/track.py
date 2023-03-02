@@ -77,3 +77,31 @@ class KF(object):
         I = np.eye(self.H.shape[1])
         self.P = (I - (K * self.H)) * self.P   #Eq.(13)
         return self.x[0:2]
+
+
+class noiseFilt(object):
+
+    def __init__(self, input_value,window_size = 10):
+        """
+        :param dt: sampling time (time for 1 cycle)
+        """
+        self.input_value=input_value
+        self.window_size=window_size
+        self.window = np.empty(1)
+
+    def median(self):
+        self.window = np.insert(self.window, 0, self.input_value)
+        self.window = self.window[:self.window_size]
+        sorted_window = sorted(self.window)
+
+        l=len(sorted_window)
+        # print(len(sorted_window))
+
+        if (l % 2) == 0:
+            # Even
+            filtered_output = (sorted_window[int(l / 2)] + sorted_window[int((l / 2) - 1)])/2
+        else:
+            # Odd window size
+            filtered_output = sorted_window[int((l - 1) / 2)]
+
+        return filtered_output

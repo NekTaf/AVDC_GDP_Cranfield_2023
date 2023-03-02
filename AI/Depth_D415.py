@@ -54,10 +54,10 @@ try:
 
         # Filters
         depth_frame = rs.decimation_filter(1).process(depth_frame)
-        # depth_frame = rs.disparity_transform(True).process(depth_frame)
+        depth_frame = rs.disparity_transform(True).process(depth_frame)
         depth_frame = rs.spatial_filter().process(depth_frame)
         depth_frame = rs.temporal_filter().process(depth_frame)
-        # depth_frame = rs.disparity_transform(False).process(depth_frame)
+        depth_frame = rs.disparity_transform(False).process(depth_frame)
         # thr_filter = rs.threshold_filter()
         # thr_filter.set_option(rs.option.min_distance, 0)
         # thr_filter.set_option(rs.option.max_distance, 4)

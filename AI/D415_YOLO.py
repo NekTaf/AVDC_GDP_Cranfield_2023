@@ -15,8 +15,10 @@ import time
 import cv2
 import numpy as np
 import pyrealsense2 as rs
-from PIL import Image
 from cluster import Clustering
+from track import noiseFilt
+from filters import Filtering
+import matplotlib.pyplot as pp
 
 
 def clamp(n, min_value, max_value):
@@ -32,7 +34,6 @@ def main():
     pipeline_wrapper = rs.pipeline_wrapper(pipeline)
     pipeline_profile = config.resolve(pipeline_wrapper)
     device = pipeline_profile.get_device()
-    device_product_line = str(device.get_info(rs.camera_info.product_line))
 
     # Enable RGB and Depth Streams
     config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
@@ -51,6 +52,7 @@ def main():
         # Start a loop to continuously capture frames and display them
         while True:
 
+            # Get Latest Frame
             pipeline.poll_for_frames()
 
             # Wait for a coherent pair of frames: depth and color
@@ -61,53 +63,113 @@ def main():
             if not depth_frame or not color_frame:
                 continue
 
-            # Format Depth Frame (for get distance)
-            depth_frame = depth_frame.as_depth_frame()
-
-            # Convert images to numpy arrays
+            # Filters
             color_image = np.asanyarray(color_frame.get_data())
+            color_image=color_image[:,50:640]
 
-            # Check if array empty (Targets Detected)
-            if depth_point.size != 0 and max(depth_point)>0.15:
-                # Threshold Filter for Segmentation
-                threshold_filter = rs.threshold_filter(min_dist=0.15, max_dist= max(depth_point))
-                depth_frame = threshold_filter.process(depth_frame).as_depth_frame()
 
+            depth_frame = rs.decimation_filter(1).process(depth_frame)
+            depth_frame = rs.disparity_transform(True).process(depth_frame)
+            depth_frame = rs.spatial_filter().process(depth_frame)
+            depth_frame = rs.temporal_filter().process(depth_frame)
+            depth_frame = rs.disparity_transform(False).process(depth_frame)
+            depth_frame = rs.hole_filling_filter().process(depth_frame)
+
+            # Get Depth Information
+            depth_frame = depth_frame.as_depth_frame()
 
             # Get Depth Image
             depth_image = np.asanyarray(depth_frame.get_data())
+            depth_image=depth_image[:,50:640]
 
-            # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
-            depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+            # Apply colormap on depth image (image must be converted to 8-bit per pixel first (alpha=0.03))
+            depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_BONE)
 
             # Grayscale Depth Color Map
             depth_colormap_gray = cv2.cvtColor(depth_colormap, cv2.COLOR_BGR2GRAY)
+            depth_colormap_gray=cv2.equalizeHist(depth_colormap_gray)
+
+            # # Bilateral filter to reduce noise
+            # depth_colormap_gray=cv2.bilateralFilter(depth_colormap_gray, 11, 60, 60)
+
+
+            edges = cv2.Canny(depth_colormap_gray, 100, 85)
+
+            # Dilate Edge Lines (Connect unconnected lines
+            kernel = np.ones((10, 10), np.uint8)
+            edges = cv2.dilate(edges, kernel, iterations=2)
+
+            # edges = cv2.bitwise_not(edges)
+            # # Define the kernel size for morphological closing
+            # kernel_size = 10
+            # kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+            # # Apply morphological closing to fill in the holes
+            # img_filled = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+            # # Invert the image again to obtain the final filled image
+            # edges = cv2.bitwise_not(img_filled)
+            # edges = cv2.bitwise_not(edges)
+            #
+            # contours, hierarchy = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # min_area = 10
+            # large_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area]
+            # mask = np.zeros_like(edges)
+            # edges=cv2.drawContours(mask, large_contours, -1, (255, 255, 255), cv2.FILLED)
+            # edges = cv2.bitwise_not(edges)
+
+            depth_colormap_gray = cv2.bitwise_and(depth_colormap_gray, depth_colormap_gray, mask=edges)
+
+
+            # # Define a kernel
+            # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            #
+            # # Perform morphological closing
+            # closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+            #
+            # # kernel = np.ones((13, 13), np.uint8)
+            # # depth_colormap_gray = cv2.dilate(closed, kernel, iterations=2)
+            #
+            #
+            # contours, hierarchy = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            #
+            # min_area = 10
+            # large_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area]
+            #
+            # mask = np.zeros_like(closed)
+            # cv2.drawContours(mask, large_contours, -1, (255, 255, 255), cv2.FILLED)
+
+            # # Apply mask to original image
+            # depth_colormap_gray = cv2.bitwise_and(depth_colormap_gray, depth_colormap_gray, mask=mask)
+            #
+            #
+            #
+            # kernel = np.ones((9, 9), np.uint8)
+            # depth_colormap_gray = cv2.dilate(depth_colormap_gray, kernel, iterations=2)
+            #
+            # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            #
+            # path_opened = cv2.morphologyEx(depth_colormap_gray, cv2.MORPH_OPEN, kernel)
+            # depth_colormap_gray = cv2.morphologyEx(path_opened, cv2.MORPH_CLOSE, kernel)
+
+
+
+
+
 
             # Cluster Depth Map
-            clustered_depth_map = Clustering(depth_colormap_gray, 2).KM()
+            # clustered_depth_map = Clustering(depth_colormap_gray, 2).KM()
+            #
+            # # Cluster Values
+            # cluster_vals = np.unique(clustered_depth_map)
+            #
+            # # Convert clusters to Binary Mask
+            # binary_mask = np.where(clustered_depth_map < (cluster_vals[0] + 5), 0, 1)
+            # binary_mask = np.uint8(binary_mask)
 
-            # print(np.unique(np.uint8(clustered_depth_map)))
-
-            # Cluster Values
-            cluster_vals = np.unique(clustered_depth_map)
-
-            # Conve
-            binary_mask = np.where(clustered_depth_map < (cluster_vals[0] + 5), 1, 0)
+            binary_mask = np.where(depth_colormap_gray > 0, 1, 0)
             binary_mask = np.uint8(binary_mask)
 
-            # Apply Morphological filter to cover holes
-            # kernel = np.ones((9, 9), np.uint8)
-            # mask_closed = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel)
-
-            # Define the structuring element
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-            morph_filtered = cv2.dilate(binary_mask, kernel, iterations=1)
-
-
-            masked_img = cv2.bitwise_and(color_image, color_image, mask=morph_filtered)
-
-
-            # masked_img = cv2.cvtColor(masked_img, cv2.COLOR_BGR2RGB)
+            # Apply mask
+            masked_img = cv2.bitwise_and(color_image, color_image, mask=binary_mask)
 
             # YOLOv8n custom on Frame
             results = model(masked_img)
@@ -150,13 +212,9 @@ def main():
 
                         depth_point[N] = clamp(depth_point[N], 0, 16)
 
-                        print(depth_point[N], " Range for target :", N)
+                        print(" Range for target", N, ":", depth_point[N], )
 
-                        print(conf_array[N], " Confidence for target :", N)
-
-                no_targets_selected = len(depth_point)
-
-                print("Total number of selected targets",no_targets_selected)
+                        print(" Confidence for target", N, ":", conf_array[N])
 
             # Show images
             cv2.namedWindow('RGB Image', cv2.WINDOW_AUTOSIZE)
@@ -165,16 +223,20 @@ def main():
             cv2.namedWindow('YOLO', cv2.WINDOW_AUTOSIZE)
             cv2.imshow('YOLO', res_plotted)
 
-            cv2.namedWindow('MASK', cv2.WINDOW_AUTOSIZE)
-            cv2.imshow('MASK', cv2.equalizeHist(morph_filtered))
 
-            cv2.namedWindow('Gray Depth Map', cv2.WINDOW_AUTOSIZE)
-            cv2.imshow('Gray Depth Map', cv2.equalizeHist(depth_colormap_gray))
+
+            cv2.namedWindow('Depth Map', cv2.WINDOW_AUTOSIZE)
+            cv2.imshow('Depth Map', (depth_colormap))
+            #
+            cv2.namedWindow('Depth Map Mask', cv2.WINDOW_AUTOSIZE)
+            cv2.imshow('Depth Map Mask', cv2.equalizeHist(depth_colormap_gray))
+
+
+
 
             # Check if the user pressed the "q" key to quit
             if cv2.waitKey(1) == ord('q'):
                 break
-
 
 
     finally:
