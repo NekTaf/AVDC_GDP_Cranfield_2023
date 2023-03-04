@@ -11,14 +11,15 @@ Features:
 """
 
 from ultralytics import YOLO
-import time
 import cv2
 import numpy as np
 import pyrealsense2 as rs
 from cluster import Clustering
+from PIL import Image
 from track import noiseFilt
 from filters import Filtering
 import matplotlib.pyplot as pp
+import time
 
 
 def clamp(n, min_value, max_value):
@@ -36,8 +37,8 @@ def main():
     device = pipeline_profile.get_device()
 
     # Enable RGB and Depth Streams
-    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 60)
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 60)
 
     # Load YOLO Model
     model = YOLO("best2.pt")
@@ -91,6 +92,8 @@ def main():
             # Bilateral filter to reduce noise
             depth_colormap_gray = cv2.bilateralFilter(depth_colormap_gray, 11, 60, 60)
 
+            input = color_image
+
             ############################################################################################################
             # # Edge Detectors and dilation
             # edges = cv2.Canny(depth_colormap_gray, 100, 85)
@@ -103,28 +106,33 @@ def main():
 
             # binary_mask = np.where(depth_colormap_gray > 0, 1, 0)
             # binary_mask = np.uint8(binary_mask)
+
+            # # Apply mask
+            # masked_img = cv2.bitwise_and(color_image, color_image, mask=binary_mask)
             ############################################################################################################
 
             ############################################################################################################
-            # Cluster Depth Map
-            clustered_depth_map = Clustering(depth_colormap_gray, 2).KM()
-
-            # Cluster Values
-            cluster_vals = np.unique(clustered_depth_map)
+            # # Cluster Depth Map
+            # clustered_depth_map = Clustering(depth_colormap_gray, 2).KM()
+            #
+            # # Cluster Values
+            # cluster_vals = np.unique(clustered_depth_map)
+            #
+            # # Create Binary Mask from Previous Segmentations
+            # binary_mask = np.where(clustered_depth_map < (cluster_vals[0] + 5), 1, 0)
+            # binary_mask = np.uint8(binary_mask)
+            #
+            # # Apply mask
+            # input = cv2.bitwise_and(color_image, color_image, mask=binary_mask)
             ############################################################################################################
-
-            # Create Binary Mask from Previous Segmentations
-            binary_mask = np.where(clustered_depth_map < (cluster_vals[0] + 5), 1, 0)
-            binary_mask = np.uint8(binary_mask)
-
-            # Apply mask
-            masked_img = cv2.bitwise_and(color_image, color_image, mask=binary_mask)
 
             # YOLOv8n custom on Frame
-            results = model(masked_img)
+            results = model(Image.fromarray(input))
 
             # Plot Results
             res_plotted = results[0].plot(show_conf=True)
+
+            res_plotted = cv2.cvtColor(res_plotted, cv2.COLOR_BGR2RGB)
 
             # Array Nx1 for confidence of object detected
             conf_array = results[0].boxes.conf.cpu().numpy()
@@ -167,7 +175,7 @@ def main():
 
             # Show images
             cv2.namedWindow('RGB Image', cv2.WINDOW_AUTOSIZE)
-            cv2.imshow('RGB Image', color_image)
+            cv2.imshow('RGB Image', (color_image))
 
             cv2.namedWindow('YOLO', cv2.WINDOW_AUTOSIZE)
             cv2.imshow('YOLO', res_plotted)
