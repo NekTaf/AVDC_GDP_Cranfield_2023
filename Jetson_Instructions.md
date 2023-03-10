@@ -10,7 +10,7 @@ Make Docker
 
 Run Docker
 
-------sudo docker run --privileged --device=/dev/video1:/dev/video1  yolov8n
+------sudo docker run --privileged --device=/dev/video*:/dev/video*  yolov8n
 
 View all Dockers
 
