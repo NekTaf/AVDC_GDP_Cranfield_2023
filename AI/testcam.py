@@ -72,7 +72,7 @@ while True:
 
 
     # Plot Output image
-    cv2.imshow('YOLO', res_plotted)
+    #cv2.imshow('YOLO', res_plotted)
 
     # Check if the user pressed the "q" key to quit
     if cv2.waitKey(1) == ord('q'):
