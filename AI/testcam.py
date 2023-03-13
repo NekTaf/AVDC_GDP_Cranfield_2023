@@ -4,18 +4,15 @@
 YOLOv8 openCV implementation
 """
 
-
-
 from ultralytics import YOLO
 import cv2
-import time
-import cv2
-import numpy as np
 
-model = YOLO("best2.pt")
+
+
+model = YOLO("best4.pt")
 
 # Create a VideoCapture object to capture images from the camera
-cap = cv2.VideoCapture(2)  # 0 is the index of the default camera
+cap = cv2.VideoCapture(0)  # 0 is the index of the default camera
 
 # Check if the camera is opened successfully
 if not cap.isOpened():
@@ -47,7 +44,7 @@ while True:
 
     # Array Nx1 for confidence of object detected
     conf_array = results[0].boxes.conf.cpu().numpy()
-    print(conf_array.shape)
+    # print(conf_array.shape)
 
     # Array Nx4 for xywh of bounding box for object detected
     box_array = results[0].boxes.xywh.cpu().numpy()
@@ -59,25 +56,27 @@ while True:
         for N in range(len(conf_array)):
 
             # Plot dot only if above confidence percentage
-            if conf_array[N] > 0.7:
+            if conf_array[N] > 0.5:
                 x = int(box_array[N, 0])
                 y = int(box_array[N, 1])
 
-                # Draw point at centre of detected objects
-                radius = 5
-                color = (0, 255, 0)  # BGR format
-                res_plotted = cv2.circle(res_plotted, (x, y), radius, color, -1)
+                # # Draw point at centre of detected objects
+                # radius = 5
+                # color = (0, 255, 0)  # BGR format
+                # res_plotted = cv2.circle(res_plotted, (x, y), radius, color, -1)
+
+                print(x,y)
+                print(conf_array)
 
 
-
-
-    # Plot Output image
-    #cv2.imshow('YOLO', res_plotted)
-
-    # Check if the user pressed the "q" key to quit
-    if cv2.waitKey(1) == ord('q'):
-        break
+    # # Plot Output image
+    # cv2.imshow('YOLO', res_plotted)
+    #
+    # # Check if the user pressed the "q" key to quit
+    # if cv2.waitKey(1) == ord('q'):
+    #     break
 
 # Release the camera and destroy all windows
 cap.release()
 cv2.destroyAllWindows()
+ser.close()
