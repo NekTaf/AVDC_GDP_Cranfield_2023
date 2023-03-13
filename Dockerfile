@@ -4,9 +4,9 @@ FROM ultralytics/ultralytics:latest-arm64
 WORKDIR /Desktop/AVDC_GDP_Cranfield_2023
 
 
-# Install correct version of PyTorch
-RUN pip uninstall -y torch torchvision
-RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu116
+## Install correct version of PyTorch
+#RUN pip uninstall -y torch torchvision
+#RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu116
 
 # Copy all directory code into the container
 COPY . .
