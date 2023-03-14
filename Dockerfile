@@ -12,5 +12,5 @@ WORKDIR /Desktop/AVDC_GDP_Cranfield_2023
 COPY . .
 
 # Run YOLOv8 Python file  
-CMD ["python3", "AI/testcam.py"]
+CMD ["python3", "AI/Main_YOLO_cam.py"]
 

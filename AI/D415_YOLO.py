@@ -17,7 +17,7 @@ import pyrealsense2 as rs
 from cluster import Clustering
 from PIL import Image
 from track import noiseFilt
-from filters import Filtering
+from image_filters import Filtering
 import matplotlib.pyplot as pp
 import time
 
